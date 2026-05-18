@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskFlow — Smart To-Do</title>
+    <meta name="description" content="A beautiful and smart to-do task manager powered by a Node.js REST API." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/dark.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Background blobs -->
+    <div class="bg-blob blob-1"></div>
+    <div class="bg-blob blob-2"></div>
+    <div class="bg-blob blob-3"></div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!--  AUTH SCREEN (Login / Register)                   -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div id="auth-screen" class="auth-screen">
+      <div class="auth-card glass">
+        <!-- Logo -->
+        <div class="auth-logo">
+          <span class="logo-icon">✦</span>
+          <span class="logo-text">TaskFlow</span>
+        </div>
+        <p class="auth-tagline">Stay organized. Stay ahead.</p>
+
+        <!-- Tab switcher -->
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
+          <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Sign Up</button>
+        </div>
+
+        <!-- LOGIN FORM -->
+        <form id="login-form" class="auth-form" onsubmit="handleLogin(event)">
+          <div class="input-group full">
+            <label for="login-username">Username</label>
+            <input id="login-username" type="text" class="input" placeholder="Enter your username" autocomplete="username" required />
+          </div>
+          <div class="input-group full">
+            <label for="login-password">Password</label>
+            <div class="pass-wrap">
+              <input id="login-password" type="password" class="input" placeholder="Enter your password" autocomplete="current-password" required />
+              <button type="button" class="pass-toggle" onclick="togglePass('login-password', this)">👁</button>
+            </div>
+          </div>
+          <div class="auth-error" id="login-error"></div>
+          <button type="submit" class="btn btn-primary full-width" id="btn-login">Sign In</button>
+          <p class="auth-footer-text">Don't have an account? <a href="#" onclick="switchAuthTab('register')">Sign Up</a></p>
+        </form>
+
+        <!-- REGISTER FORM -->
+        <form id="register-form" class="auth-form" style="display:none" onsubmit="handleRegister(event)">
+          <div class="form-row-2">
+            <div class="input-group">
+              <label for="reg-firstname">First Name</label>
+              <input id="reg-firstname" type="text" class="input" placeholder="John" required />
+            </div>
+            <div class="input-group">
+              <label for="reg-lastname">Last Name</label>
+              <input id="reg-lastname" type="text" class="input" placeholder="Doe" />
+            </div>
+          </div>
+          <div class="input-group full">
+            <label for="reg-username">Username <span class="required">*</span></label>
+            <input id="reg-username" type="text" class="input" placeholder="Choose a username" autocomplete="username" required />
+          </div>
+          <div class="input-group full">
+            <label for="reg-email">Email</label>
+            <input id="reg-email" type="email" class="input" placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div class="input-group full">
+            <label for="reg-password">Password <span class="required">*</span></label>
+            <div class="pass-wrap">
+              <input id="reg-password" type="password" class="input" placeholder="Min 6 characters" autocomplete="new-password" required />
+              <button type="button" class="pass-toggle" onclick="togglePass('reg-password', this)">👁</button>
+            </div>
+          </div>
+          <div class="input-group full">
+            <label for="reg-confirm">Confirm Password <span class="required">*</span></label>
+            <div class="pass-wrap">
+              <input id="reg-confirm" type="password" class="input" placeholder="Repeat password" autocomplete="new-password" required />
+              <button type="button" class="pass-toggle" onclick="togglePass('reg-confirm', this)">👁</button>
+            </div>
+          </div>
+          <div class="auth-error" id="register-error"></div>
+          <button type="submit" class="btn btn-primary full-width" id="btn-register">Create Account</button>
+          <p class="auth-footer-text">Already have an account? <a href="#" onclick="switchAuthTab('login')">Sign In</a></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!--  MAIN APP                                         -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div id="app-screen" class="container" style="display:none">
+
+      <!-- Header -->
+      <header class="header">
+        <div class="header-top">
+          <div class="logo">
+            <span class="logo-icon">✦</span>
+            <span class="logo-text">TaskFlow</span>
+          </div>
+          <div class="header-right">
+            <div class="stats-bar">
+              <div class="stat-pill" id="stat-total">
+                <span class="stat-num" id="count-total">0</span>
+                <span class="stat-label">Total</span>
+              </div>
+              <div class="stat-pill done">
+                <span class="stat-num" id="count-done">0</span>
+                <span class="stat-label">Done</span>
+              </div>
+              <div class="stat-pill overdue" id="stat-overdue" style="display:none">
+                <span class="stat-num" id="count-overdue">0</span>
+                <span class="stat-label">Overdue</span>
+              </div>
+              <div class="stat-pill pending">
+                <span class="stat-num" id="count-pending">0</span>
+                <span class="stat-label">Pending</span>
+              </div>
+            </div>
+            <!-- User profile -->
+            <div class="user-menu" id="user-menu">
+              <div class="user-avatar" id="user-avatar" onclick="toggleUserDropdown()">A</div>
+              <div class="user-dropdown glass" id="user-dropdown" style="display:none">
+                <div class="user-info-block">
+                  <div class="user-avatar-lg" id="user-avatar-lg">A</div>
+                  <div>
+                    <p class="user-fullname" id="user-fullname">User</p>
+                    <p class="user-email-sm" id="user-email-sm"></p>
+                  </div>
+                </div>
+                <hr class="dropdown-divider" />
+                <button class="dropdown-item" onclick="openProfileModal()">⚙ Edit Profile</button>
+                <button class="dropdown-item danger" onclick="logout()">⎋ Sign Out</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h1 class="heading">Your Tasks, <span id="greeting-name">there</span> 👋</h1>
+        <p class="subheading">Stay organized. Stay focused.</p>
+
+        <!-- Progress bar -->
+        <div class="progress-wrap">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <span class="progress-label" id="progress-label">0% complete</span>
+        </div>
+      </header>
+
+      <!-- Search Bar -->
+      <section class="search-section">
+        <div class="search-wrap glass">
+          <span class="search-icon">🔍</span>
+          <input id="search-input" type="text" class="search-input" placeholder="Search tasks..." oninput="applyFilters()" />
+          <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none">✕</button>
+        </div>
+      </section>
+
+      <!-- Add Task Form -->
+      <section class="add-section">
+        <div class="form-card glass">
+          <h2 class="form-title">Add New Task</h2>
+          <div class="form-grid">
+            <div class="input-group full">
+              <label for="input-title">Task Title <span class="required">*</span></label>
+              <input id="input-title" type="text" placeholder="What do you need to do?" class="input" maxlength="120" />
+            </div>
+            <div class="input-group full">
+              <label for="input-desc">Description</label>
+              <input id="input-desc" type="text" placeholder="Add some details (optional)" class="input" maxlength="200" />
+            </div>
+            <div class="input-group">
+              <label for="input-priority">Priority</label>
+              <div class="select-wrap">
+                <select id="input-priority" class="input select">
+                  <option value="low">🟢 Low</option>
+                  <option value="medium" selected>🟡 Medium</option>
+                  <option value="high">🔴 High</option>
+                </select>
+              </div>
+            </div>
+            <div class="input-group">
+              <label for="input-category">Category</label>
+              <div class="select-wrap">
+                <select id="input-category" class="input select">
+                  <option value="">📌 None</option>
+                  <option value="work">💼 Work</option>
+                  <option value="personal">🏠 Personal</option>
+                  <option value="health">❤️ Health</option>
+                  <option value="learning">📚 Learning</option>
+                  <option value="finance">💰 Finance</option>
+                </select>
+              </div>
+            </div>
+            <div class="input-group">
+              <label for="input-due">Due Date</label>
+              <input id="input-due" type="date" class="input" />
+            </div>
+            <div class="input-group btn-group">
+              <button id="btn-add" class="btn btn-primary" onclick="addTodo()">
+                <span class="btn-icon">+</span> Add Task
+              </button>
+            </div>
+          </div>
+          <div class="toast" id="toast"></div>
+        </div>
+      </section>
+
+      <!-- Filters + Sort -->
+      <section class="filter-section">
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="setFilter('all', this)" id="tab-all">All <span class="tab-count" id="tc-all">0</span></button>
+          <button class="filter-tab" onclick="setFilter('pending', this)" id="tab-pending">Pending <span class="tab-count" id="tc-pending">0</span></button>
+          <button class="filter-tab" onclick="setFilter('completed', this)" id="tab-completed">Done <span class="tab-count" id="tc-completed">0</span></button>
+          <button class="filter-tab overdue-tab" onclick="setFilter('overdue', this)" id="tab-overdue">Overdue <span class="tab-count" id="tc-overdue">0</span></button>
+        </div>
+        <div class="filter-right">
+          <div class="select-wrap">
+            <select class="input select small" id="category-filter" onchange="applyFilters()">
+              <option value="">All Categories</option>
+              <option value="work">💼 Work</option>
+              <option value="personal">🏠 Personal</option>
+              <option value="health">❤️ Health</option>
+              <option value="learning">📚 Learning</option>
+              <option value="finance">💰 Finance</option>
+            </select>
+          </div>
+          <div class="select-wrap">
+            <select class="input select small" id="priority-filter" onchange="applyFilters()">
+              <option value="">All Priorities</option>
+              <option value="high">🔴 High</option>
+              <option value="medium">🟡 Medium</option>
+              <option value="low">🟢 Low</option>
+            </select>
+          </div>
+          <div class="select-wrap">
+            <select class="input select small" id="sort-select" onchange="applyFilters()">
+              <option value="newest">🕒 Newest</option>
+              <option value="oldest">🕐 Oldest</option>
+              <option value="due">📅 Due Date</option>
+              <option value="priority">🔥 Priority</option>
+              <option value="title">🔤 Title A–Z</option>
+            </select>
+          </div>
+          <button class="btn btn-danger-ghost" onclick="clearCompleted()">🗑 Clear Done</button>
+        </div>
+      </section>
+
+      <!-- Task List -->
+      <section class="task-list" id="task-list">
+        <div class="loader" id="loader">
+          <div class="spinner"></div>
+          <p>Loading tasks...</p>
+        </div>
+        <div class="empty-state" id="empty-state" style="display:none">
+          <div class="empty-icon">🎉</div>
+          <p class="empty-title">No tasks here!</p>
+          <p class="empty-sub">Add your first task above to get started.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!--  EDIT MODAL                                       -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="modal" style="display:none" onclick="closeModal(event)">
+      <div class="modal glass">
+        <h3 class="modal-title">✎ Edit Task</h3>
+        <input type="hidden" id="edit-id" />
+        <div class="input-group full">
+          <label for="edit-title">Title</label>
+          <input id="edit-title" type="text" class="input" />
+        </div>
+        <div class="input-group full">
+          <label for="edit-desc">Description</label>
+          <input id="edit-desc" type="text" class="input" />
+        </div>
+        <div class="form-row-2">
+          <div class="input-group">
+            <label for="edit-priority">Priority</label>
+            <div class="select-wrap">
+              <select id="edit-priority" class="input select">
+                <option value="low">🟢 Low</option>
+                <option value="medium">🟡 Medium</option>
+                <option value="high">🔴 High</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="edit-category">Category</label>
+            <div class="select-wrap">
+              <select id="edit-category" class="input select">
+                <option value="">📌 None</option>
+                <option value="work">💼 Work</option>
+                <option value="personal">🏠 Personal</option>
+                <option value="health">❤️ Health</option>
+                <option value="learning">📚 Learning</option>
+                <option value="finance">💰 Finance</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="input-group full">
+          <label for="edit-due">Due Date</label>
+          <input id="edit-due" type="date" class="input" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!--  PROFILE MODAL                                    -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="profile-modal" style="display:none" onclick="closeProfileModal(event)">
+      <div class="modal glass">
+        <h3 class="modal-title">⚙ Edit Profile</h3>
+        <div class="avatar-preview-wrap">
+          <div class="avatar-preview" id="avatar-preview">A</div>
+          <label class="avatar-upload-btn" for="p-avatar">📷 Change Picture</label>
+          <input type="file" id="p-avatar" accept="image/*" style="display:none" onchange="previewAvatar(event)">
+        </div>
+        <div class="form-row-2">
+          <div class="input-group">
+            <label for="p-firstname">First Name</label>
+            <input id="p-firstname" type="text" class="input" />
+          </div>
+          <div class="input-group">
+            <label for="p-lastname">Last Name</label>
+            <input id="p-lastname" type="text" class="input" />
+          </div>
+        </div>
+        <div class="input-group full">
+          <label for="p-email">Email</label>
+          <input id="p-email" type="email" class="input" />
+        </div>
+        <div class="input-group full">
+          <label for="p-newpass">New Password <span class="muted-label">(leave blank to keep current)</span></label>
+          <div class="pass-wrap">
+            <input id="p-newpass" type="password" class="input" placeholder="New password" />
+            <button type="button" class="pass-toggle" onclick="togglePass('p-newpass', this)">👁</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeProfileModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
