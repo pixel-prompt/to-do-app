@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-let users = require("../data/users");
+const { run, get } = require("../data/db");
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey_taskflow";
 
@@ -17,7 +17,7 @@ const register = async (req, res) => {
     }
 
     // Check if user exists
-    const userExists = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    const userExists = await get("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", [username]);
     if (userExists) {
       return res.status(400).json({ success: false, message: "Username already exists" });
     }
@@ -27,24 +27,19 @@ const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user
-    const newUser = {
-      id: uuidv4(),
-      firstname: firstname || "",
-      lastname: lastname || "",
-      username,
-      email: email || "",
-      password: hashedPassword,
-      createdAt: new Date().toISOString()
-    };
-
-    users.push(newUser);
+    const id = uuidv4();
+    const createdAt = new Date().toISOString();
+    const role = username.toLowerCase() === "admin" ? "admin" : "user";
+    
+    await run(
+      "INSERT INTO users (id, firstname, lastname, username, email, password, role, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [id, firstname || "", lastname || "", username, email || "", hashedPassword, role, createdAt]
+    );
 
     // Create JWT
-    const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id, username }, JWT_SECRET, { expiresIn: '7d' });
 
-    // Remove password from response
-    const userResponse = { ...newUser };
-    delete userResponse.password;
+    const userResponse = { id, firstname, lastname, username, email, role, createdAt };
 
     res.status(201).json({
       success: true,
@@ -69,7 +64,7 @@ const login = async (req, res) => {
     }
 
     // Find user
-    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    const user = await get("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", [username]);
     if (!user) {
       return res.status(400).json({ success: false, message: "Invalid credentials" });
     }
@@ -99,19 +94,18 @@ const login = async (req, res) => {
 // ─────────────────────────────────────────────
 // GET /api/auth/me
 // ─────────────────────────────────────────────
-const getProfile = (req, res) => {
+const getProfile = async (req, res) => {
   try {
-    const user = users.find(u => u.id === req.user.id);
+    const user = await get("SELECT * FROM users WHERE id = ?", [req.user.id]);
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    const userResponse = { ...user };
-    delete userResponse.password;
+    delete user.password;
 
     res.status(200).json({
       success: true,
-      user: userResponse
+      user
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
@@ -124,29 +118,41 @@ const getProfile = (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { firstname, lastname, email, password, avatar } = req.body;
-    const index = users.findIndex(u => u.id === req.user.id);
     
-    if (index === -1) {
+    const user = await get("SELECT * FROM users WHERE id = ?", [req.user.id]);
+    if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    if (firstname !== undefined) users[index].firstname = firstname.trim();
-    if (lastname !== undefined) users[index].lastname = lastname.trim();
-    if (email !== undefined) users[index].email = email.trim();
-    if (avatar !== undefined) users[index].avatar = avatar; // Save base64 avatar
+    let query = "UPDATE users SET ";
+    let params = [];
+    let updates = [];
+
+    if (firstname !== undefined) { updates.push("firstname = ?"); params.push(firstname.trim()); }
+    if (lastname !== undefined) { updates.push("lastname = ?"); params.push(lastname.trim()); }
+    if (email !== undefined) { updates.push("email = ?"); params.push(email.trim()); }
+    if (avatar !== undefined) { updates.push("avatar = ?"); params.push(avatar); }
     
     if (password && password.length >= 6) {
       const salt = await bcrypt.genSalt(10);
-      users[index].password = await bcrypt.hash(password, salt);
+      const hashedPassword = await bcrypt.hash(password, salt);
+      updates.push("password = ?");
+      params.push(hashedPassword);
     }
 
-    const userResponse = { ...users[index] };
-    delete userResponse.password;
+    if (updates.length > 0) {
+      query += updates.join(", ") + " WHERE id = ?";
+      params.push(req.user.id);
+      await run(query, params);
+    }
+
+    const updatedUser = await get("SELECT * FROM users WHERE id = ?", [req.user.id]);
+    delete updatedUser.password;
 
     res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      user: userResponse
+      user: updatedUser
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error", error: error.message });

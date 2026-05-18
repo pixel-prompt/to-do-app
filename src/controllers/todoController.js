@@ -1,42 +1,27 @@
 const { v4: uuidv4 } = require("uuid");
-let todos = require("../data/todos");
+const { run, get, all } = require("../data/db");
 
 // ─────────────────────────────────────────────
-// GET /api/todos  → Get all todos (with optional filter)
+// GET /api/todos
 // ─────────────────────────────────────────────
-const getAllTodos = (req, res) => {
+const getAllTodos = async (req, res) => {
   try {
-    let result = todos.filter(t => t.userId === req.user.id);
-
-    // Filter by completed status  e.g. ?completed=true
-    if (req.query.completed !== undefined) {
-      const isCompleted = req.query.completed === "true";
-      result = result.filter((t) => t.completed === isCompleted);
-    }
-
-    // Filter by priority  e.g. ?priority=high
-    if (req.query.priority) {
-      result = result.filter((t) => t.priority === req.query.priority);
-    }
-
-    res.status(200).json({
-      success: true,
-      count: result.length,
-      data: result,
-    });
+    const todos = await all("SELECT * FROM todos WHERE userId = ? ORDER BY createdAt DESC", [req.user.id]);
+    res.status(200).json({ success: true, count: todos.length, data: todos });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
 
 // ─────────────────────────────────────────────
-// GET /api/todos/:id  → Get a single todo by ID
+// GET /api/todos/:id
 // ─────────────────────────────────────────────
-const getTodoById = (req, res) => {
+const getTodoById = async (req, res) => {
   try {
-    const todo = todos.find((t) => t.id === req.params.id && t.userId === req.user.id);
+    const todo = await get("SELECT * FROM todos WHERE id = ? AND userId = ?", [req.params.id, req.user.id]);
+
     if (!todo) {
-      return res.status(404).json({ success: false, message: `Todo with id '${req.params.id}' not found` });
+      return res.status(404).json({ success: false, message: "Task not found" });
     }
     res.status(200).json({ success: true, data: todo });
   } catch (error) {
@@ -45,162 +30,121 @@ const getTodoById = (req, res) => {
 };
 
 // ─────────────────────────────────────────────
-// POST /api/todos  → Create a new todo
+// POST /api/todos
 // ─────────────────────────────────────────────
-const createTodo = (req, res) => {
+const createTodo = async (req, res) => {
   try {
     const { title, description, priority, category, dueDate } = req.body;
 
-    // Validation
-    if (!title || title.trim() === "") {
-      return res.status(400).json({ success: false, message: "Title is required" });
+    if (!title) {
+      return res.status(400).json({ success: false, message: "Task title is required" });
     }
 
-    const validPriorities = ["low", "medium", "high"];
-    if (priority && !validPriorities.includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        message: `Priority must be one of: ${validPriorities.join(", ")}`,
-      });
-    }
+    const id = uuidv4();
+    const createdAt = new Date().toISOString();
+    const updatedAt = createdAt;
 
-    const newTodo = {
-      id: uuidv4(),
-      title: title.trim(),
-      description: description ? description.trim() : "",
-      completed: false,
-      priority: priority || "medium",
-      category: category || "",
-      dueDate: dueDate || "",
-      userId: req.user.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    await run(
+      "INSERT INTO todos (id, userId, title, description, completed, priority, category, dueDate, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [id, req.user.id, title, description || "", 0, priority || "medium", category || "", dueDate || "", createdAt, updatedAt]
+    );
 
-    todos.push(newTodo);
+    const newTodo = await get("SELECT * FROM todos WHERE id = ?", [id]);
 
-    res.status(201).json({
-      success: true,
-      message: "Todo created successfully",
-      data: newTodo,
-    });
+    res.status(201).json({ success: true, data: newTodo });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
 
 // ─────────────────────────────────────────────
-// PUT /api/todos/:id  → Fully update a todo
+// PUT /api/todos/:id
 // ─────────────────────────────────────────────
-const updateTodo = (req, res) => {
+const updateTodo = async (req, res) => {
   try {
-    const index = todos.findIndex((t) => t.id === req.params.id && t.userId === req.user.id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: `Todo with id '${req.params.id}' not found` });
+    const todo = await get("SELECT * FROM todos WHERE id = ? AND userId = ?", [req.params.id, req.user.id]);
+
+    if (!todo) {
+      return res.status(404).json({ success: false, message: "Task not found" });
     }
 
     const { title, description, completed, priority, category, dueDate } = req.body;
-
-    if (title !== undefined && title.trim() === "") {
-      return res.status(400).json({ success: false, message: "Title cannot be empty" });
-    }
-
-    const validPriorities = ["low", "medium", "high"];
-    if (priority && !validPriorities.includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        message: `Priority must be one of: ${validPriorities.join(", ")}`,
-      });
-    }
-
-    const updated = {
-      ...todos[index],
-      title: title !== undefined ? title.trim() : todos[index].title,
-      description: description !== undefined ? description.trim() : todos[index].description,
-      completed: completed !== undefined ? Boolean(completed) : todos[index].completed,
-      priority: priority || todos[index].priority,
-      category: category !== undefined ? category : todos[index].category,
-      dueDate: dueDate !== undefined ? dueDate : todos[index].dueDate,
-      updatedAt: new Date().toISOString(),
-    };
-
-    todos[index] = updated;
-
-    res.status(200).json({
-      success: true,
-      message: "Todo updated successfully",
-      data: updated,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
-  }
-};
-
-// ─────────────────────────────────────────────
-// PATCH /api/todos/:id/toggle  → Toggle completed status
-// ─────────────────────────────────────────────
-const toggleTodo = (req, res) => {
-  try {
-    const index = todos.findIndex((t) => t.id === req.params.id && t.userId === req.user.id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: `Todo with id '${req.params.id}' not found` });
-    }
-
-    todos[index].completed = !todos[index].completed;
-    todos[index].updatedAt = new Date().toISOString();
-
-    res.status(200).json({
-      success: true,
-      message: `Todo marked as ${todos[index].completed ? "completed" : "incomplete"}`,
-      data: todos[index],
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
-  }
-};
-
-// ─────────────────────────────────────────────
-// DELETE /api/todos/:id  → Delete a todo
-// ─────────────────────────────────────────────
-const deleteTodo = (req, res) => {
-  try {
-    const index = todos.findIndex((t) => t.id === req.params.id && t.userId === req.user.id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: `Todo with id '${req.params.id}' not found` });
-    }
-
-    const deleted = todos.splice(index, 1)[0];
-
-    res.status(200).json({
-      success: true,
-      message: "Todo deleted successfully",
-      data: deleted,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
-  }
-};
-
-// ─────────────────────────────────────────────
-// DELETE /api/todos  → Delete ALL completed todos
-// ─────────────────────────────────────────────
-const clearCompleted = (req, res) => {
-  try {
-    const userTodos = todos.filter((t) => t.userId === req.user.id);
-    const otherTodos = todos.filter((t) => t.userId !== req.user.id);
-    const activeUserTodos = userTodos.filter((t) => !t.completed);
     
-    todos = [...otherTodos, ...activeUserTodos];
-    
-    // Update reference in data store
-    require("../data/todos").length = 0;
-    todos.forEach((t) => require("../data/todos").push(t));
+    let query = "UPDATE todos SET ";
+    let params = [];
+    let updates = [];
 
-    res.status(200).json({
-      success: true,
-      message: `Cleared ${userTodos.length - activeUserTodos.length} completed todo(s)`,
-      data: activeUserTodos,
-    });
+    if (title !== undefined) { updates.push("title = ?"); params.push(title); }
+    if (description !== undefined) { updates.push("description = ?"); params.push(description); }
+    if (completed !== undefined) { updates.push("completed = ?"); params.push(completed ? 1 : 0); }
+    if (priority !== undefined) { updates.push("priority = ?"); params.push(priority); }
+    if (category !== undefined) { updates.push("category = ?"); params.push(category); }
+    if (dueDate !== undefined) { updates.push("dueDate = ?"); params.push(dueDate); }
+    
+    updates.push("updatedAt = ?");
+    params.push(new Date().toISOString());
+
+    query += updates.join(", ") + " WHERE id = ? AND userId = ?";
+    params.push(req.params.id, req.user.id);
+
+    await run(query, params);
+
+    const updatedTodo = await get("SELECT * FROM todos WHERE id = ?", [req.params.id]);
+
+    res.status(200).json({ success: true, data: updatedTodo });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// DELETE /api/todos/:id
+// ─────────────────────────────────────────────
+const deleteTodo = async (req, res) => {
+  try {
+    const todo = await get("SELECT * FROM todos WHERE id = ? AND userId = ?", [req.params.id, req.user.id]);
+
+    if (!todo) {
+      return res.status(404).json({ success: false, message: "Task not found" });
+    }
+
+    await run("DELETE FROM todos WHERE id = ? AND userId = ?", [req.params.id, req.user.id]);
+
+    res.status(200).json({ success: true, message: "Task deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// PATCH /api/todos/:id/toggle
+// ─────────────────────────────────────────────
+const toggleTodo = async (req, res) => {
+  try {
+    const todo = await get("SELECT * FROM todos WHERE id = ? AND userId = ?", [req.params.id, req.user.id]);
+    if (!todo) {
+      return res.status(404).json({ success: false, message: "Task not found" });
+    }
+
+    const newCompleted = todo.completed === 1 ? 0 : 1;
+    const updatedAt = new Date().toISOString();
+
+    await run("UPDATE todos SET completed = ?, updatedAt = ? WHERE id = ? AND userId = ?", [newCompleted, updatedAt, req.params.id, req.user.id]);
+
+    const updatedTodo = await get("SELECT * FROM todos WHERE id = ?", [req.params.id]);
+    res.status(200).json({ success: true, data: updatedTodo });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+// DELETE /api/todos/clear
+// ─────────────────────────────────────────────
+const clearCompleted = async (req, res) => {
+  try {
+    await run("DELETE FROM todos WHERE userId = ? AND completed = 1", [req.user.id]);
+    res.status(200).json({ success: true, message: "Completed tasks cleared" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
@@ -211,7 +155,7 @@ module.exports = {
   getTodoById,
   createTodo,
   updateTodo,
-  toggleTodo,
   deleteTodo,
-  clearCompleted,
+  toggleTodo,
+  clearCompleted
 };

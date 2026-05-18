@@ -138,6 +138,7 @@
                   </div>
                 </div>
                 <hr class="dropdown-divider" />
+                <button class="dropdown-item" id="admin-panel-btn" style="display:none" onclick="openAdminPanel()">👑 Admin Panel</button>
                 <button class="dropdown-item" onclick="openProfileModal()">⚙ Edit Profile</button>
                 <button class="dropdown-item danger" onclick="logout()">⎋ Sign Out</button>
               </div>
@@ -356,6 +357,43 @@
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeProfileModal()">Cancel</button>
           <button class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!--  ADMIN SCREEN                                      -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div id="admin-screen" class="container" style="display:none">
+      <header class="header">
+        <div class="header-top">
+          <div class="logo">
+            <span class="logo-icon">✦</span>
+            <span class="logo-text">TaskFlow Admin</span>
+          </div>
+          <button class="btn btn-ghost" onclick="closeAdminPanel()">⬅ Back to App</button>
+        </div>
+      </header>
+
+      <div class="glass form-card">
+        <h2 class="form-title">Users Management</h2>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Avatar</th>
+                <th>Name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Tasks</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-users-list">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

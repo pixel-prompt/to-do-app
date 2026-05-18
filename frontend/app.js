@@ -190,6 +190,12 @@ function applyUserUI(user) {
   document.getElementById("user-fullname").textContent  = fullname;
   document.getElementById("user-email-sm").textContent  = user.email || "";
   document.getElementById("greeting-name").textContent  = user.firstname || user.username;
+
+  // Toggle admin panel button visibility based on role
+  const adminPanelBtn = document.getElementById("admin-panel-btn");
+  if (adminPanelBtn) {
+    adminPanelBtn.style.display = user.role === "admin" ? "block" : "none";
+  }
 }
 
 function toggleUserDropdown() {
@@ -210,6 +216,7 @@ function logout() {
   authToken   = null;
   allTodos    = [];
   document.getElementById("app-screen").style.display  = "none";
+  document.getElementById("admin-screen").style.display = "none";
   document.getElementById("auth-screen").style.display = "flex";
   document.getElementById("user-dropdown").style.display = "none";
   switchAuthTab("login");
@@ -590,3 +597,117 @@ document.addEventListener("keydown", e => {
     document.getElementById("app-screen").style.display  = "none";
   }
 })();
+
+/* ─────────────────── Admin Panel ────────────────── */
+function openAdminPanel() {
+  document.getElementById("user-dropdown").style.display = "none";
+  document.getElementById("app-screen").style.display = "none";
+  document.getElementById("admin-screen").style.display = "block";
+  loadAdminUsers();
+}
+
+function closeAdminPanel() {
+  document.getElementById("admin-screen").style.display = "none";
+  document.getElementById("app-screen").style.display = "block";
+}
+
+async function loadAdminUsers() {
+  const tbody = document.getElementById("admin-users-list");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align: center;">Loading users...</td></tr>`;
+
+  try {
+    const res = await apiFetch("/admin/users");
+    const json = await res.json();
+    if (json.success) {
+      renderAdminUsers(json.data);
+    } else {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--accent);">Failed to load users: ${json.message}</td></tr>`;
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--accent);">Could not connect to server.</td></tr>`;
+  }
+}
+
+function renderAdminUsers(users) {
+  const tbody = document.getElementById("admin-users-list");
+  tbody.innerHTML = "";
+
+  if (users.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center;">No users registered.</td></tr>`;
+    return;
+  }
+
+  users.forEach(u => {
+    const isMe = u.id === currentUser.id;
+    const initial = (u.firstname || u.username || "U")[0].toUpperCase();
+    const fullname = [u.firstname, u.lastname].filter(Boolean).join(" ") || u.username;
+    
+    // Avatar cell
+    let avatarHtml = `<div class="admin-avatar-sm">${initial}</div>`;
+    if (u.avatar) {
+      avatarHtml = `<div class="admin-avatar-sm" style="background-image: url(${u.avatar})"></div>`;
+    }
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${avatarHtml}</td>
+      <td style="font-weight: 600;">${escHtml(fullname)} ${isMe ? '<span style="color: var(--primary-h); font-size: 11px;">(You)</span>' : ''}</td>
+      <td>@${escHtml(u.username)}</td>
+      <td>${escHtml(u.email || 'N/A')}</td>
+      <td><span class="role-badge role-${u.role}">${u.role}</span></td>
+      <td style="font-weight: 500;">${u.taskCount}</td>
+      <td>
+        <div class="admin-actions">
+          <button class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;" onclick="toggleUserRole('${u.id}', '${u.role}')" ${isMe ? 'disabled' : ''}>
+            ${u.role === 'admin' ? 'Demote' : 'Promote'}
+          </button>
+          <button class="btn btn-ghost danger" style="padding: 4px 8px; font-size: 12px; color: var(--accent);" onclick="deleteUserFromAdmin('${u.id}')" ${isMe ? 'disabled' : ''}>
+            Delete
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function toggleUserRole(userId, currentRole) {
+  const newRole = currentRole === 'admin' ? 'user' : 'admin';
+  if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) return;
+
+  try {
+    const res = await apiFetch(`/admin/users/${userId}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ role: newRole })
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast(`Role updated to ${newRole}!`);
+      loadAdminUsers();
+    } else {
+      alert(json.message || "Failed to update role");
+    }
+  } catch (err) {
+    alert("Server error when updating role.");
+  }
+}
+
+async function deleteUserFromAdmin(userId) {
+  if (!confirm("Are you sure you want to permanently delete this user and all of their tasks? This action cannot be undone.")) return;
+
+  try {
+    const res = await apiFetch(`/admin/users/${userId}`, {
+      method: "DELETE"
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast("User deleted successfully!");
+      loadAdminUsers();
+    } else {
+      alert(json.message || "Failed to delete user");
+    }
+  } catch (err) {
+    alert("Server error when deleting user.");
+  }
+}

@@ -21,9 +21,12 @@ app.use((req, _res, next) => {
 // ── Static Frontend ───────────────────────────
 app.use(express.static(path.join(__dirname, "../frontend")));
 
+const adminRoutes = require("./routes/adminRoutes");
+
 // ── Routes ────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/todos", todoRoutes);
+app.use("/api/admin", adminRoutes);
 
 // ── Health check (API only) ───────────────────
 app.get("/api", (req, res) => {
